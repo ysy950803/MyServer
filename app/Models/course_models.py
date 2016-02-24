@@ -43,8 +43,9 @@ class Notification(EmbeddedDocument):
     unread_students = ListField(StringField(), required=True)
 
     def to_dict(self):
-        return {'ntfc_id': str(self.ntfc_id), 'created_on': self.created_on, 'content': self.content, 'on_top':
-            self.on_top, 'by': self.by, 'title': self.title}
+        return {'ntfc_id': str(self.ntfc_id), 'created_on': time_to_string(self.created_on), 'content': self.content,
+                'on_top':
+                    self.on_top, 'by': self.by, 'title': self.title}
 
 
 class Question(Document):
@@ -71,7 +72,7 @@ class Question(Document):
     def to_dict_all(self):
         temp_dict = self.to_dict_student_test()
         temp_dict['created_on'] = self.created_on
-        temp_dict['last_modified'] = self.last_modified
+        # temp_dict['last_modified'] = self.last_modified
         temp_dict['by'] = self.by
         return temp_dict
 
@@ -127,8 +128,8 @@ class Test(Document):
     def to_dict_student_take(self):
         json = dict()
         json['test_id'] = str(self.test_id)
-        json['begins_on'] = self.begins_on
-        json['expires_on'] = self.begins_on
+        json['begins_on'] = time_to_string(self.begins_on)
+        json['expires_on'] = time_to_string(self.begins_on)
         json['message'] = self.message
         json['has_hint'] = self.has_hint
         json['blacklist'] = self.blacklist
@@ -143,8 +144,8 @@ class Test(Document):
     def to_dict_preview(self):
         json = dict()
         json['test_id'] = str(self.test_id)
-        json['begins_on'] = self.begins_on
-        json['expires_on'] = self.begins_on
+        json['begins_on'] = time_to_string(self.begins_on)
+        json['expires_on'] = time_to_string(self.begins_on)
         json['message'] = self.message
         return json
 
@@ -209,7 +210,7 @@ class SubCourse(Document):
         return {'course_id': self.course_id, 'sub_id': self.sub_id, 'teachers': teachers, 'course_name': self.name,
                 'times': self.get_times_and_rooms_dict()}
 
-    def to_dict_brief_on_login(self, student):
+    def to_dict_brief_on_login_student(self, student):
         json = self.to_dict_brief()
         json['unread_ntfcs'] = self.get_unread_notifications(student)
         json['untaken_tests'] = self.get_untaken_tests(student)
@@ -233,9 +234,16 @@ class SubCourse(Document):
 
     # 返回课程通知列表
     def get_notifications_list(self):
-        n_list = []
-        map(lambda n: n_list.append(n.to_dict()), self.notifications)
-        return n_list
+        normal_notifications = []
+        top_notifications = []
+        for notification in self.notifications:
+            if notification.on_top:
+                top_notifications.append(notification.to_dict())
+            else:
+                normal_notifications.append(notification.to_dict())
+        normal_notifications.extend(top_notifications)
+        normal_notifications.reverse()
+        return normal_notifications
 
     def get_all_tests_dict_paginating(self, page, per_page, finished=False, student_id=None):
         offset = (page - 1) * per_page
@@ -258,6 +266,7 @@ class SubCourse(Document):
         for notification in self.notifications:
             if student.user_id in notification.unread_students:
                 notifications.append(notification.to_dict())
+        notifications.reverse()
         return notifications
 
     def get_untaken_tests(self, student):

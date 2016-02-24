@@ -216,7 +216,7 @@ class Seat(Document):
     row = IntField(required=True)
     col = IntField(required=True)
     cur_stu = StringField(default="")
-    exists = BooleanField(required=True)
+    #exists = BooleanField(required=True)
     late = IntField(default=0)
     students = DictField(default={})
     late_secs = DictField(default={})
@@ -225,7 +225,7 @@ class Seat(Document):
     def to_dict(self, period, show_late_secs=False):
         period = str(period)
         json = {'seat_id': self.seat_id, 'row': self.row, 'col': self.col,
-                'exists': self.exists}
+                'status': self.status}
         student_id = self.students.get(period)
         json['cur_stu'] = student_id or ''
         if show_late_secs:
@@ -236,7 +236,7 @@ class Seat(Document):
         return self.to_mongo()
 
     def to_dict_preview(self):
-        return {'seat_id': self.seat_id, 'row': self.row, 'col': self.col, 'exists': self.exists, 'status': self.status}
+        return {'seat_id': self.seat_id, 'row': self.row, 'col': self.col, 'status': self.status}
 
     def parse_id(self):
         def to_str(integer):

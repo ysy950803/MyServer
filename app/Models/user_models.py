@@ -59,7 +59,7 @@ class User(Document):
             return Error.BAD_SEAT_TOKEN
 
     def generate_token(self):
-        s = TimedJSONWebSignatureSerializer(flask.current_app.config['SECRET_KEY'], expires_in=3000)
+        s = TimedJSONWebSignatureSerializer(flask.current_app.config['SECRET_KEY'], expires_in=300000)
         return s.dumps({'user_id': self.user_id, 'role': self.role})
 
     def generate_seat_token(self, period, late_secs=0):
@@ -198,7 +198,6 @@ class Student(User, Document):
     major_name = StringField(required=True)
     grade = IntField(required=True)
     done_tests = ReferenceField('Test')
-
     def register_course(self, course):
         if not User.registerCourse(self, course):
             return False
@@ -210,7 +209,7 @@ class Student(User, Document):
         json = User.to_dict_all(self)
         json['class_name'] = self.class_name
         json['major_name'] = self.major_name
-        # json['courses'] = self.get_course_briefs_dict(on_login=True)
+        json['courses'] = self.get_course_briefs_dict(on_login=True)
         return json
 
     def to_dict_brief(self):
@@ -232,7 +231,7 @@ class Student(User, Document):
 
     def get_course_briefs_dict(self, on_login=False):
         if on_login:
-            return map(lambda x: x.to_dict_brief_on_login(student=self), self.courses)
+            return map(lambda x: x.to_dict_brief_on_login_student(student=self), self.courses)
         return map(lambda x: x.to_dict_brief(), self.courses)
 
     @staticmethod

@@ -82,7 +82,9 @@ def return200(e):
 @main.app_errorhandler(400)
 def error403(e):
     if hasattr(g, 'msg'):
+        print g.msg
         return make_response(jsonify(g.msg), 400)
+
     return make_response(jsonify(error_msg='Bad Request', error_code=400), 400)
 
 

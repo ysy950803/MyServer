@@ -16,3 +16,7 @@ def no_dereference_id_only(list_field):
 def pull_from_reference_list(list_field, pk):
     document = list_field._instance
     document.update(**{'pull__' + list_field._name: DBRef(collection=document._cls, id=pk)})
+
+
+def time_to_string(time_o):
+    return time_o.strftime("%Y-%m-%d %H:%M:%S")

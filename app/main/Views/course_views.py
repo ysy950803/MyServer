@@ -3,7 +3,7 @@ from . import *
 import datetime
 import json
 
-ALLOWED_SEAT_IN_ADVANCED_SECONDS = 1200
+ALLOWED_SEAT_IN_ADVANCED_SECONDS = 12000
 
 
 def check_if_able_to_choose_seat(course, period):
@@ -28,13 +28,16 @@ def get_seat_token():
     course = g.sub_course
     today = TeachDay.get_now_teach_day()
     period = TeachDay.is_course_on_day_and_get_period(course, today)
+    if not period:
+        handle_error(Error.COURSE_IS_NOT_ON_TODAY)
     access_type, remaining_or_past_secs = check_if_able_to_choose_seat(course=course, period=period)
     if isinstance(access_type, Error):
         handle_error(access_type, late_secs=remaining_or_past_secs)
     if access_type == -1:
         handle_error(Error.SEAT_CHOOSING_NOT_AVAILABLE_YET,
-                     remaining=remaining_or_past_secs)
-    return success_reponse(seat_token=g.user.generate_seat_token(period=period.num, late_secs=remaining_or_past_secs),
+                     remaining_secs=remaining_or_past_secs)
+    return success_reponse(room_id=period.room_id,
+                           seat_token=g.user.generate_seat_token(period=period.num, late_secs=remaining_or_past_secs),
                            seat_map_token=g.user.generate_seat_map_token(period=period.num,
                                                                          room_id=period.room_id,
                                                                          combined_id=course.combined_id),
@@ -72,18 +75,18 @@ def get_seats_in_room():
     check_final = get('check_final')
     credential = validate_seat_map_token()
     room = get_by_id_or_ERROR(Room, credential['room_id'])
-    final = False
+    is_final = False
     if check_final:
         combined_id = credential['combined_id']
         course = get_by_id_or_ERROR(SubCourse, combined_id)
         period = Period.get_period(credential['period'])
         access_type, secs = check_if_able_to_choose_seat(course, period)
         if isinstance(access_type, Error):
-            final = True
+            is_final = True
     return success_reponse(
         seats=room.get_seats_dict(period=credential['period'], show_late_secs=credential['role'] == 1),
         row_num=room.row,
-        col_num=room.col, final=final)
+        col_num=room.col, is_final=is_final)
 
 
 @main.route('/seat/getSeatMapPreview', methods=['POST'])
@@ -138,7 +141,6 @@ def choose_seat():
 
 
 @main.route('/seat/freeSeat', methods=['POST'])
-@require_having_sub_course
 def free_seat():
     credential = validate_seat_token()
     period_num = credential['period']
@@ -179,7 +181,7 @@ def get_notifications():
 
 
 @main.route('/course/notification/postNotification', methods=['POST'])
-@require_is_teacher
+# @require_is_teacher
 @require_having_sub_course
 def post_notification():
     course = get_course_pre()
@@ -190,12 +192,13 @@ def post_notification():
     by = g.user.name
     notification = Notification(title=title, created_on=datetime.datetime.now(), content=content, on_top=on_top, by=by,
                                 unread_students=no_dereference_id_only(course.students))
-    course.update(add_to_set__notifications=notification)
+    course.update(push__notifications=notification)
 
     try:
         course.save()
     except NotImplementedError:
         handle_error(Error.UNKNOWN_INTERNAL_ERROR)
+
     return success_reponse(ntfc_id=str(notification.ntfc_id))
 
 
@@ -228,6 +231,35 @@ def delete_notification():
     return success_reponse()
 
 
+@main.route('/course/notification/markRead', methods=['POST'])
+@require_token
+def mark_read():
+    get = get_json()
+    combined_id = get('course_id') + '#' + get('sub_id')
+    query = SubCourse.objects(pk=combined_id)
+    query.filter(notifications__ntfc_id=ObjectId(get('ntfc_id'))).update(
+        pull__notifications__S__unread_students=g.user.user_id)
+    return success_reponse()
+
+
+@main.route('/course/notification/markUnread', methods=['POST'])
+@require_token
+def mark_unread():
+    get = get_json()
+    combined_id = get('course_id') + '#' + get('sub_id')
+    query = SubCourse.objects(pk=combined_id)
+    query.filter(notifications__ntfc_id=ObjectId(get('ntfc_id'))).update(
+        add_to_set__notifications__S__unread_students=g.user.user_id)
+    return success_reponse()
+
+
+@main.route('/course/notification/getUnreadNotifications', methods=['POST'])
+@require_having_sub_course
+def get_unread():
+    course = g.sub_course
+    return success_reponse(notifications=course.get_unread_notifications(student=g.user))
+
+
 @main.route('/course/knowledgePoint/getKnowledgePoints', methods=['POST'])
 @main.route('/course/timeAndRoom/getTimes', methods=['POST'])
 def get_time_and_room():
@@ -258,7 +290,10 @@ def get_all_students():
 
 @main.route('/TEST', methods=['GET', 'POST'])
 def test():
-    if request.method == 'GET':
-        return make_response(jsonify({'msg': 'This is GET.'}), 200)
-    get = get_json()
-    return make_response(jsonify({'msg': 'Your request: ' + get('field')}), 200)
+    import dateutil.parser as parser
+    text = 'Thu, 16 Dec 2010 12:14:05 +0000'
+    date = (parser.parse(text))
+    from datetime import tzinfo
+    time = datetime.datetime.now()
+
+    return success_reponse(time=time.replace(microsecond=0).isoformat())
