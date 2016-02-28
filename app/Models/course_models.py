@@ -17,19 +17,91 @@ class TimeAndRoom(EmbeddedDocument):
             self.period, 'weeks': self.weeks}
 
 
+class Section(EmbeddedDocument):
+    chapter_num = IntField(required=True)
+    section_num = IntField(required=True)
+    section_name = StringField(required=True)
+    planned_hours = IntField(required=True)
+    points = ListField(ReferenceField('KnowledgePoint'))
+
+    def to_dict(self):
+        return {'section_name': self.section_name, 'section_num': self.section_num,
+                'points': map(lambda x: x.to_dict_brief(), self.points), 'planned_hours': self.planned_hours}
+
+
+class Chapter(EmbeddedDocument):
+    chapter_num = IntField(required=True)
+    chapter_name = StringField(required=True)
+
+    def to_dict(self):
+        return {'chapter_num': self.chapter_num, 'chapter_name': self.chapter_name}
+
+
+class Syllabus(Document):
+    course_id = StringField(required=True, primary_key=True)
+    chapters = EmbeddedDocumentListField(Chapter)
+    sections = EmbeddedDocumentListField(Section)
+
+    def add_chapters(self, chapters_dict):
+        chapters = []
+        chapter_nums = []
+        for chapter in chapters_dict:
+            chapter_num = chapter['chapter_num']
+            chapter_nums.append(chapter_num)
+            chapters.append(Chapter(chapter_num=chapter_num, chapter_name=chapter['chapter_name']))
+        r = self.modify({'chapters__chapter_num__nin': chapter_nums}, add_to_set__chapters=chapters)
+        if not r:
+            return Error.CHAPTER_ALREADY_EXISTS
+
+    def add_sections(self, sections_dict):
+        sections = []
+        for section in sections_dict:
+            chapter_num = section['chapter_num']
+            section_num = section['section_num']
+            c_list = self.chapters.filter(chapter_num=chapter_num)
+            if not c_list:
+                return Error.CHAPTER_NOT_FOUND
+            s_list = self.sections.filter(chapter_num=chapter_num, section_num=section_num)
+            if s_list:
+                return Error.SECTION_ALREADY_EXISTS
+            section = Section(chapter_num=section['chapter_num'], section_num=section_num,
+                              section_name=section['section_name'], planned_hours=section['planned_hours'])
+            sections.append(section)
+        self.update(add_to_set__sections=sections)
+
+    def to_dict(self):
+        chapters = {}
+        for chapter in self.chapters:
+            t = chapter.to_dict()
+            t['sections'] = []
+            chapters[chapter.chapter_num] = t
+        for section in self.sections:
+            chapters[section.chapter_num]['sections'].append(section.to_dict())
+        return map(lambda (key, value): value, chapters.items())
+
+
 # 知识点
 class KnowledgePoint(Document):
     course_id = StringField(required=True)
-    chapter = IntField(required=True)
+    chapter_num = IntField(required=True)
+    section_num = IntField(required=True)
     point_id = ObjectIdField(default=lambda: ObjectId(), primary_key=True)
     content = StringField(required=True)
     num = IntField(required=True)
     level = IntField(required=True)
     questions = ListField(ReferenceField('Question'))
 
-    def to_dict(self):
-        return {'num': self.num, 'chapter': self.chapter, 'content': self.content, 'point_id': str(self.point_id),
+    def to_dict_brief(self):
+        return {'point_id': str(self.point_id), 'content': self.content,
                 'level': self.level}
+
+    def to_dict_all(self):
+        return {'chapter': self.chapter, 'section': self.section, 'point_id': str(self.point_id),
+                'content': self.content,
+                'level': self.level}
+
+    def get_questions_list(self):
+        return map(lambda x: x.to_dict_brief(), self.questions)
 
 
 # 课程通知
@@ -50,7 +122,7 @@ class Notification(EmbeddedDocument):
 
 class Question(Document):
     course_id = StringField(required=True)
-    quest_id = ObjectIdField(default=lambda: ObjectId(), primary_key=True)
+    question_id = ObjectIdField(default=lambda: ObjectId(), primary_key=True)
     created_on = DateTimeField(default=lambda: datetime.datetime.now())
     last_modified = DateTimeField(default=lambda: datetime.datetime.now())
     type = IntField(required=True)
@@ -65,7 +137,8 @@ class Question(Document):
     hint = StringField(required=True)
 
     def to_dict_student_test(self):
-        return {'quest_id': str(self.quest_id), 'type': self.type, 'choices': self.choices, 'content': self.content,
+        return {'question_id': str(self.question_id), 'type': self.type, 'choices': self.choices,
+                'content': self.content,
                 'difficulty': self.difficulty, 'answers': self.answers, 'detailed_answer': self.detailed_answer,
                 'point_id': str(self.knowledge_point.point_id)}
 
@@ -76,8 +149,8 @@ class Question(Document):
         temp_dict['by'] = self.by
         return temp_dict
 
-    def to_dict_preview(self):
-        return {'quest_id': self.quest_id, 'content': self.content, 'type': self.type, 'point_id': self.point_id}
+    def to_dict_brief(self):
+        return {'question_id': str(self.question_id), 'content': self.content, 'type': self.type}
 
 
 class TestQuestionResult(EmbeddedDocument):
@@ -197,6 +270,7 @@ class SubCourse(Document):
     tests = ListField(ReferenceField('Test', reverse_delete_rule=PULL))
     settings = EmbeddedDocumentField(SubCourseSetting, required=True, default=SubCourseSetting())
     classes = ListField(StringField())
+    main_course = ReferenceField('Course', required=True)
 
     def to_dict_all(self, from_preview=False, for_teacher=False):
         extra = {'students': self.get_students_dict(for_teacher=for_teacher), 'ntfcs': self.get_notifications_list()}
@@ -281,12 +355,14 @@ class SubCourse(Document):
 class Course(Document):
     course_id = StringField(primary_key=True)
     name = StringField(required=True)
+    credits = IntField()
     department = StringField()
     sub_course_ids = ListField(StringField())
     sub_courses = ListField(ReferenceField(SubCourse, reverse_delete_rule=PULL))
     course_type = IntField()
     points = ListField(ReferenceField(KnowledgePoint, reverse_delete_rule=PULL))
     questions = ListField(ReferenceField(Question, reverse_delete_rule=PULL))
+    syllabus = ReferenceField(Syllabus)
 
     def to_dict(self):
         subs = []
@@ -298,11 +374,6 @@ class Course(Document):
         subs = []
         map(lambda x: subs.append(x.to_dict_brief()), self.sub_courses)
         return {'course_id': self.course_id, 'course_name': self.name, 'course_type': self.course_type, 'subs': subs}
-
-    def get_knowledge_points_dict(self):
-        points = []
-        map(lambda x: points.append(x.to_dict_all()), self.points)
-        return points
 
     def get_questions_dict_paginating(self, page, per_page):
         offset = (page - 1) * per_page

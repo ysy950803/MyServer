@@ -59,12 +59,12 @@ class User(Document):
             return Error.BAD_SEAT_TOKEN
 
     def generate_token(self):
-        s = TimedJSONWebSignatureSerializer(flask.current_app.config['SECRET_KEY'], expires_in=300000)
+        s = TimedJSONWebSignatureSerializer(flask.current_app.config['SECRET_KEY'], expires_in=300000000)
         return s.dumps({'user_id': self.user_id, 'role': self.role})
 
-    def generate_seat_token(self, period, late_secs=0):
+    def generate_seat_token(self, period, combined_id, late_secs=0, ):
         s = TimedJSONWebSignatureSerializer(flask.current_app.config['SECRET_KEY'], expires_in=3000)
-        return s.dumps({'user_id': self.user_id, 'period': period, 'late_secs': late_secs})
+        return s.dumps({'user_id': self.user_id, 'period': period, 'late_secs': late_secs, 'combined_id': combined_id})
 
     def validate_seat_token(self, seat_token):
         try:
@@ -198,6 +198,7 @@ class Student(User, Document):
     major_name = StringField(required=True)
     grade = IntField(required=True)
     done_tests = ReferenceField('Test')
+
     def register_course(self, course):
         if not User.registerCourse(self, course):
             return False

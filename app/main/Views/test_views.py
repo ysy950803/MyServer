@@ -18,14 +18,14 @@ def post_question():
     question = instantiate_from_request_or_422(Question, knowledge_point=point, answers=answers, choices=choices)
     question.save()
     point.update(add_to_set__questions=question)
-    return success_reponse(quest_id=str(question.quest_id))
+    return success_reponse(question_id=str(question.question_id))
 
 
 @main.route('/course/question/modifyQuestion', methods=['POST'])
 def modify_question():
     get = get_json()
-    quest_id = get('quest_id')
-    question = Question.objects(quest_id=quest_id).first()
+    question_id = get('question_id')
+    question = Question.objects(question_id=question_id).first()
     point_id = get('point_id')
     try:
         point = KnowledgePoint.objects(point_id=get('point_id')).first()
@@ -41,13 +41,30 @@ def modify_question():
 @main.route('/course/question/deleteQuestion', methods=['POST'])
 def delete_question():
     get = get_json()
-    quest_id = get('quest_id')
+    question_id = get('question_id')
     # identifier = get('identifier')
-    question = Question.objects(quest_id=quest_id).first()
+    question = Question.objects(question_id=question_id).first()
     if not question:
         return success_reponse()
     question.delete()
     return success_reponse()
+
+
+@main.route('/course/question/getQuestionsWithPoints', methods=['POST'])
+@require_having_main_course
+def get_questions_with_points():
+    get = get_json()
+    points = get('points')
+    points_returned = []
+    for point_id in points:
+        try:
+            point = KnowledgePoint.objects.get(point_id=point_id)
+        except (DoesNotExist, ValidationError):
+            handle_error(Error.KNOWLEDGE_POINT_NOT_FOUND, point_id=point_id)
+        l = {'point_id': point_id}
+        l['questions'] = point.get_questions_list()
+        points_returned.append(l)
+    return success_reponse(points=points_returned)
 
 
 @main.route('/course/question/getAllQuestions', methods=['POST'])
@@ -68,7 +85,7 @@ def get_all_questions():
 @require_is_teacher
 def get_question():
     get = get_json()
-    question = get_by_id_or_ERROR(Question, get('quest_id'))
+    question = get_by_id_or_ERROR(Question, get('question_id'))
     return success_reponse(question=question.to_dict_all())
 
 
@@ -78,9 +95,9 @@ def get_questions():
     question_list = get('questions')
     questions = []
 
-    def get_question(quest_id):
+    def get_question(question_id):
         try:
-            q = Question.objects(quest_id=quest_id).first()
+            q = Question.objects(question_id=question_id).first()
         except ValidationError:
             handle_error(Error.RESOURCE_NOT_FOUND)
         if not q:
@@ -94,7 +111,7 @@ def get_questions():
 @main.route('/course/test/postTest', methods=['POST'])
 @require_token
 def post_test():
-    course = get_course_pre()
+    course = get_sub_course_pre()
     get = get_json()
     question_ids = get('questions')
     questions = []
@@ -102,7 +119,7 @@ def post_test():
     sub_id = get('sub_id')
     combined_id = course_id + '#' + sub_id
     by = g.user.user_id
-    map(lambda quest_id: questions.append(get_by_id_or_ERROR(Question, quest_id)), question_ids)
+    map(lambda question_id: questions.append(get_by_id_or_ERROR(Question, question_id)), question_ids)
     new_test = instantiate_from_request_or_422(Test, questions=questions, combined_id=combined_id)
     new_test.save()
     course.update(add_to_set__tests=new_test)
@@ -112,7 +129,7 @@ def post_test():
 @main.route('/course/test/getAllTests', methods=['POST'])
 @require_having_sub_course
 def get_all_tests():
-    course = get_course_pre()
+    course = get_sub_course_pre()
     get = get_json()
     role = get('role')
     page = get('page')
@@ -135,11 +152,12 @@ def get_test():
     return success_reponse(test=test.to_dict_all())
 
 
-@main.route('/course/test/getTestQuestions', methods=['POST'])
+@main.route('/course/test/getQuestionsWithTest', methods=['POST'])
 def get_test_questions():
     get = get_json()
     test_id = get('test_id')
-    test = get_by_id_or_ERROR(Test, test_id)
+    test = get_by_id_or_ERROR(Test, test_id, error=Error.TEST_NOT_FOUND)
+    now = datetime.datetime.now()
+    if test.begins_on > now:
+        handle_error(Error.TEST_HAVENT_BEGUN)
     return success_reponse(questions=test.get_random_questions())
-
-

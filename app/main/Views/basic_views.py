@@ -143,7 +143,7 @@ def register_teacher():
 @main.route('/user/registerCourse', methods=['POST'])
 @require_token
 def register_course():
-    course = get_course_pre()
+    course = get_sub_course_pre()
     role = g.user.role
     if role == 1:
         if g.user in course.teachers:

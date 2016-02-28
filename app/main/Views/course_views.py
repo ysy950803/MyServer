@@ -3,7 +3,7 @@ from . import *
 import datetime
 import json
 
-ALLOWED_SEAT_IN_ADVANCED_SECONDS = 12000
+ALLOWED_SEAT_IN_ADVANCED_SECONDS = 1200
 
 
 def check_if_able_to_choose_seat(course, period):
@@ -37,7 +37,8 @@ def get_seat_token():
         handle_error(Error.SEAT_CHOOSING_NOT_AVAILABLE_YET,
                      remaining_secs=remaining_or_past_secs)
     return success_reponse(room_id=period.room_id,
-                           seat_token=g.user.generate_seat_token(period=period.num, late_secs=remaining_or_past_secs),
+                           seat_token=g.user.generate_seat_token(period=period.num, late_secs=remaining_or_past_secs,
+                                                                 combined_id=course.combined_id),
                            seat_map_token=g.user.generate_seat_map_token(period=period.num,
                                                                          room_id=period.room_id,
                                                                          combined_id=course.combined_id),
@@ -129,7 +130,16 @@ def validate_seat_token():
 def choose_seat():
     credential = validate_seat_token()
     period_num = credential['period']
+    combined_id = credential['combined_id']
     late_secs = credential['late_secs']
+    period = Period.get_period(period_num)
+    course = get_by_id_or_ERROR(SubCourse, combined_id, error=Error.SUB_COURSE_NOT_FOUND)
+    access_type, remaining_or_past_secs = check_if_able_to_choose_seat(course=course, period=period)
+    if isinstance(access_type, Error):
+        handle_error(access_type, late_secs=remaining_or_past_secs)
+    if access_type == -1:
+        handle_error(Error.SEAT_CHOOSING_NOT_AVAILABLE_YET,
+                     remaining_secs=remaining_or_past_secs)
     get = get_json()
     seat_id = get('seat_id')
     seat = get_by_id_or_ERROR(Seat, seat_id, error=Error.SEAT_NOT_FOUND)
@@ -144,6 +154,19 @@ def choose_seat():
 def free_seat():
     credential = validate_seat_token()
     period_num = credential['period']
+    combined_id = credential['combined_id']
+    late_secs = credential['late_secs']
+    period = Period.get_period(period_num)
+    course = get_by_id_or_ERROR(SubCourse, combined_id, error=Error.SUB_COURSE_NOT_FOUND)
+    access_type, remaining_or_past_secs = check_if_able_to_choose_seat(course=course, period=period)
+
+    if access_type == Error.YOU_ARE_TOO_LATE:
+        handle_error(Error.COURSE_ALREADY_BEGUN)
+    if access_type == -1:
+        handle_error(Error.SEAT_CHOOSING_NOT_AVAILABLE_YET,
+                     remaining_secs=remaining_or_past_secs)
+    if isinstance(access_type, Error):
+        handle_error(access_type)
     get = get_json()
     seat_id = get('seat_id')
     seat = get_by_id_or_ERROR(Seat, seat_id, error=Error.SEAT_NOT_FOUND)
@@ -167,7 +190,7 @@ def get_main_course():
 # @require_having_sub_course
 @require_token
 def get_sub_course():
-    course = get_course_pre()
+    course = get_sub_course_pre()
     role = g.user.role
     return success_reponse(sub_course=course.to_dict_all(from_preview=True, for_teacher=False))
 
@@ -175,7 +198,7 @@ def get_sub_course():
 @main.route('/course/notification/getNotifications', methods=['POST'])
 @require_having_sub_course
 def get_notifications():
-    course = get_course_pre()
+    course = get_sub_course_pre()
     print course.get_notifications_list()
     return success_reponse(notifications=course.get_notifications_list())
 
@@ -184,7 +207,7 @@ def get_notifications():
 # @require_is_teacher
 @require_having_sub_course
 def post_notification():
-    course = get_course_pre()
+    course = get_sub_course_pre()
     get = get_json()
     content = get('content')
     on_top = get('on_top')
@@ -206,7 +229,7 @@ def post_notification():
 @require_is_teacher
 @require_having_sub_course
 def modify_notification():
-    course = get_course_pre()
+    course = get_sub_course_pre()
     allowed = ['content', 'title', 'on_top']
     get = get_json()
     try:
@@ -224,7 +247,7 @@ def modify_notification():
 
 @main.route('/course/notification/deleteNotification', methods=['POST'])
 def delete_notification():
-    course = get_course_pre()
+    course = get_sub_course_pre()
     get = get_json()
     ntfc_id = get('ntfc_id')
     course.update(pull__notifications__ntfc_id=ntfc_id)
@@ -260,16 +283,49 @@ def get_unread():
     return success_reponse(notifications=course.get_unread_notifications(student=g.user))
 
 
-@main.route('/course/knowledgePoint/getKnowledgePoints', methods=['POST'])
+@main.route('/course/syllabus/getSyllabus', methods=['POST'])
+@require_having_main_course
+def get_syllabus():
+    course = g.main_course
+    return success_reponse(chapters=course.syllabus.to_dict())
+
+
+@main.route('/course/syllabus/addChapters', methods=['POST'])
+@require_having_main_course
+def add_chapter():
+    course = g.main_course
+    get = get_json()
+    chapters = get('chapters')
+    r = course.syllabus.add_chapters(chapters_dict=chapters)
+    if isinstance(r, Error):
+        handle_error(r)
+    return success_reponse()
+
+
+@main.route('/course/syllabus/addSections', methods=['POST'])
+@require_having_main_course
+def add_section():
+    course = g.main_course
+    get = get_json()
+    sections = get('sections')
+    try:
+        r = course.syllabus.add_sections(sections_dict=sections)
+    except KeyError, key:
+        handle_error(Error.FIELD_MISSING, field=key.message)
+    if isinstance(r, Error):
+        handle_error(r)
+    return success_reponse()
+
+
 @main.route('/course/timeAndRoom/getTimes', methods=['POST'])
 def get_time_and_room():
-    course = get_course_pre()
+    course = get_sub_course_pre()
     return success_reponse(times=course.get_times_and_rooms_dict())
 
 
 @main.route('/course/registerTeacher', methods=['POST'])
 def course_register_teacher():
-    course = get_course_pre()
+    course = get_sub_course_pre()
     get = get_json()
     teacher_id = get('teacher_id')
     teacher = get_by_id_or_ERROR(Teacher, teacher_id)
@@ -284,16 +340,5 @@ def course_register_teacher():
 
 @main.route('/course/getAllStudents', methods=['POST'])
 def get_all_students():
-    course = get_course_pre()
+    course = get_sub_course_pre()
     return success_reponse(students=course.get_students_dict())
-
-
-@main.route('/TEST', methods=['GET', 'POST'])
-def test():
-    import dateutil.parser as parser
-    text = 'Thu, 16 Dec 2010 12:14:05 +0000'
-    date = (parser.parse(text))
-    from datetime import tzinfo
-    time = datetime.datetime.now()
-
-    return success_reponse(time=time.replace(microsecond=0).isoformat())

@@ -1,6 +1,6 @@
 from mongoengine import Document, EmbeddedDocument, StringField, ListField, ReferenceField, EmbeddedDocumentField, \
     DateTimeField, \
-    BooleanField, IntField, EmbeddedDocumentListField, ObjectIdField, DictField, NULLIFY, PULL, context_managers
+    BooleanField, IntField, EmbeddedDocumentListField, ObjectIdField, DictField, NULLIFY, PULL, context_managers, DoesNotExist
 
 from bson import ObjectId, DBRef
 import datetime

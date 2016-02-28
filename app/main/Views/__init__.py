@@ -15,7 +15,7 @@ PER_PAGE = 5
 
 
 # 获取POST参数中的课程编号和讲台编号,获取课程并返回,找不到则404
-def get_course_pre():
+def get_sub_course_pre():
     get = get_json()
     course_id = get('course_id')
     sub_id = get('sub_id')
@@ -149,7 +149,7 @@ def require_having_sub_course(func):
     @wraps(func)
     def require(*args, **kwargs):
         get_user_pre()
-        course = get_course_pre()
+        course = get_sub_course_pre()
         g.sub_course = course
         if g.user.role == 1:
             if g.user.user_id not in no_dereference_id_only(course.teachers):
@@ -166,22 +166,16 @@ def require_having_main_course(func):
     @wraps(func)
     def require(*args, **kwargs):
         get_user_pre()
-        course = get_main_course_pre()
+        course = get_sub_course_pre()
         course_id = course.course_id
-        g.main_course = course
-        found = False
+        g.sub_course = course
+        g.main_course = course.main_course
         if g.user.role == 1:
-            for sub_course in course.sub_courses:
-                if g.user.user_id in sub_course.teachers:
-                    found = True
-                break
+            if g.user.user_id not in no_dereference_id_only(course.teachers):
+                handle_error(Error.YOU_DO_NOT_HAVE_THIS_COURSE)
         elif g.user.role == 2:
-            for sub_course in course.sub_courses:
-                if g.user.user_id in sub_course.students:
-                    found = True
-                break
-        if not found:
-            handle_error(Error.YOU_DO_NOT_HAVE_THIS_COURSE)
+            if g.user.user_id not in no_dereference_id_only(course.students):
+                handle_error(Error.YOU_DO_NOT_HAVE_THIS_COURSE)
         return func(*args, **kwargs)
 
     return require
