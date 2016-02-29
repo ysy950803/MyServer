@@ -6,13 +6,11 @@ from . import *
 def post_question():
     course = get_main_course_pre()
     get = get_json()
-    # identifier=get('identifier')
     try:
-        point = KnowledgePoint.objects(point_id=get('point_id')).first()
-    except ValidationError:
-        handle_error(Error.RESOURCE_NOT_FOUND)
-    if not point:
-        handle_error(Error.RESOURCE_NOT_FOUND)
+        point = KnowledgePoint.objects.get(point_id=get('point_id'))
+    except:
+        handle_error(Error.KNOWLEDGE_POINT_NOT_FOUND)
+
     answers = get('answers')
     choices = get('choices')
     question = instantiate_from_request_or_422(Question, knowledge_point=point, answers=answers, choices=choices)
@@ -21,30 +19,28 @@ def post_question():
     return success_reponse(question_id=str(question.question_id))
 
 
-@main.route('/course/question/modifyQuestion', methods=['POST'])
-def modify_question():
-    get = get_json()
-    question_id = get('question_id')
-    question = Question.objects(question_id=question_id).first()
-    point_id = get('point_id')
-    try:
-        point = KnowledgePoint.objects(point_id=get('point_id')).first()
-    except ValidationError:
-        handle_error(Error.RESOURCE_NOT_FOUND)
-    if not question:
-        handle_error(Error.RESOURCE_NOT_FOUND)
-    modify_from_request_or_422(question, knowledge_point=point)
-    question.save()
-    return success_reponse()
+# @main.route('/course/question/modifyQuestion', methods=['POST'])
+# def modify_question():
+#     get = get_json()
+#     question_id = get('question_id')
+#     try:
+#         question = Question.objects.get(question_id=question_id)
+#     except:
+#         handle_error(Error.KNOWLEDGE_POINT_NOT_FOUND)
+#
+#
+#     modify_from_request_or_422(question, allowed=['content','hint','choices','answers',''],knowledge_point=point)
+#     question.save()
+#     return success_reponse()
 
 
 @main.route('/course/question/deleteQuestion', methods=['POST'])
 def delete_question():
     get = get_json()
     question_id = get('question_id')
-    # identifier = get('identifier')
-    question = Question.objects(question_id=question_id).first()
-    if not question:
+    try:
+        question = Question.objects.get(question_id=question_id)
+    except:
         return success_reponse()
     question.delete()
     return success_reponse()

@@ -61,7 +61,6 @@ def get_departments():
 
 
 @main.route('/user/register/getMajors', methods=['POST'])
-@require_token
 def get_majors():
     get = get_json()
     school_id = get('school_id')

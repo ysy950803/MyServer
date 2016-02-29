@@ -296,9 +296,14 @@ def add_chapter():
     course = g.main_course
     get = get_json()
     chapters = get('chapters')
+    if course.syllabus is None:
+        syllabus = Syllabus(course_id=course.course_id)
+        syllabus.save()
+        course.update(syllabus=s)
     r = course.syllabus.add_chapters(chapters_dict=chapters)
     if isinstance(r, Error):
         handle_error(r)
+
     return success_reponse()
 
 
@@ -315,6 +320,28 @@ def add_section():
     if isinstance(r, Error):
         handle_error(r)
     return success_reponse()
+
+
+@main.route('/course/syllabus/addKnowledgePoint', methods=['POST'])
+@require_having_main_course
+def add_knowledge_point():
+    course = g.main_course
+    get = get_json()
+    chapter_num = get('chapter_num')
+    section_num = get('section_num')
+    content = get('content')
+    level = get('level')
+    kp = KnowledgePoint(course_id=course.course_id, chapter_num=chapter_num, section_num=section_num, content=content,
+                        level=level)
+    updated = Syllabus.objects(course_id=course.course_id).filter(sections__section_num=section_num,
+                                                                  sections__chapter_num=chapter_num).update(
+        push__sections__S__points=kp)
+
+    if updated:
+        kp.save()
+        return success_reponse(point_id=str(kp.point_id))
+
+    handle_error(Error.SECTION_NOT_FOUND)
 
 
 @main.route('/course/timeAndRoom/getTimes', methods=['POST'])
