@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from . import *
 
-WEEK_NO = 16
+WEEK_NO = 1
 
 
 class TeachDay:

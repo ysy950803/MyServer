@@ -21,8 +21,8 @@ def user_login(token_only=False):
     if token_only:
         return success_reponse(token=user.generate_token())
     json_dict = user.to_dict_all()
-    json_dict['token'] = user.generate_token()
-    return success_reponse(json_dict)
+    return success_reponse(user=json_dict, current_week=WEEK_NO, token=user.generate_token())
+
 
 @main.route('/user/login/getToken', methods=['POST'])
 def get_token():

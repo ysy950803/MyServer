@@ -136,6 +136,7 @@ class Question(Document):
     by = StringField()
     hint = StringField(required=True)
     level = IntField(required=True)
+
     def to_dict_student_test(self):
         return {'question_id': str(self.question_id), 'type': self.type, 'choices': self.choices,
                 'content': self.content,
